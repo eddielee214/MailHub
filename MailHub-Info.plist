@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- 连接服务器必须用 https；只有局域网地址(IP、.local、无点主机名)允许 http，方便自建在家里 -->
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<!-- 邮件正文里的 http 图片只在网页视图里放行，且仍受"阻止远程图片"开关和 CSP 控制 -->
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
+</dict>
+</plist>
