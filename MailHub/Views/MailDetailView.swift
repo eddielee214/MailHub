@@ -130,7 +130,7 @@ struct MailDetailView: View {
 
     private var senderLine: some View {
         HStack(alignment: .top, spacing: 12) {
-            Avatar(text: sender.display)
+            SenderAvatar(sender)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(sender.display)

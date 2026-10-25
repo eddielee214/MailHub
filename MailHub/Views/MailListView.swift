@@ -247,7 +247,7 @@ struct MailRow: View {
     var body: some View {
         let sender = MailAddress(mail.from)
         HStack(alignment: .top, spacing: DS.Spacing.m) {
-            Avatar(text: sender.display)
+            SenderAvatar(sender)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(sender.display)

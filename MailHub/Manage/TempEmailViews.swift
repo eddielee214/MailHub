@@ -346,7 +346,7 @@ struct TempMailRow: View {
     var body: some View {
         let sender = MailAddress(mail.from)
         HStack(alignment: .top, spacing: DS.Spacing.m) {
-            Avatar(text: sender.display)
+            SenderAvatar(sender)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(sender.display).font(.subheadline).bold().lineLimit(1)
@@ -391,7 +391,7 @@ struct TempMailDetailView: View {
                 VStack(alignment: .leading, spacing: DS.Spacing.l) {
                     Text(detail.subject ?? "(无主题)").font(.title2.weight(.semibold)).textSelection(.enabled)
                     HStack(spacing: DS.Spacing.m) {
-                        Avatar(text: MailAddress(detail.from).display)
+                        SenderAvatar(MailAddress(detail.from))
                         VStack(alignment: .leading, spacing: 2) {
                             Text(MailAddress(detail.from).display).font(.subheadline).bold().lineLimit(1)
                             Text(MailDate.full(detail.date)).font(.caption).foregroundStyle(.secondary)

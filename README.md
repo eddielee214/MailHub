@@ -39,6 +39,7 @@
 
 - 收件箱 / 垃圾箱 / 已删除 / 全部，邮件详情、附件预览、全部附件打包下载
 - 识别邮件里的验证码，在列表上直接复制
+- 常见大厂发件人(Google、Microsoft、GitHub、Discord、支付宝、各大银行等)显示品牌图标，图标内置在 App 里
 - 标记已读、删除；Outlook 账号可以写邮件和回复(Graph 纯文本)
 
 **账号管理**
@@ -65,6 +66,7 @@
 - 不保存登录密码，只保留服务器的登录会话
 - 默认不加载邮件里的远程图片、样式和字体，发件人没法用追踪像素知道你打开了邮件；可以单次显示，或信任某个发件人
 - 邮件正文不执行脚本；点链接先显示真实地址
+- 发件人图标默认只用内置的；"联网获取发件人图标"默认关闭，打开后会把发件人域名发给 DuckDuckGo 取网站图标
 - 可以开 Face ID 解锁；切到后台时遮住内容；看账号凭据要先过 Face ID
 - 复制的验证码和邮箱 1 分钟后从剪贴板清除，也不同步到其他设备
 - 公网服务器只允许 https，局域网地址才能用 http；网络响应不写入磁盘缓存
@@ -85,6 +87,7 @@
 
 - 服务端是 [assast/outlookEmail](https://github.com/assast/outlookEmail)，MailHub 的功能都靠它的 API。
 - 这是我个人维护的项目，和 outlookEmail 作者、Microsoft 都没有关系，有问题请在[本仓库](https://github.com/eddielee214/MailHub/issues)提。Outlook、Hotmail 是 Microsoft 的商标。
+- 发件人品牌图形来自 [Simple Icons](https://simpleicons.org)(CC0)，用 `tools/make-brand-icons.py` 生成；各品牌标志的商标属于其所有者。
 - 仓库里没有任何服务器地址、Cookie 或凭据，截图用的是演示数据。
 
 [MIT](LICENSE) 许可。

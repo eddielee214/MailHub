@@ -27,6 +27,10 @@ struct SettingsView: View {
                     Toggle(isOn: $privacy.confirmLinks) {
                         row("打开链接前确认", "link", "先显示真实网址，防止伪装成正规网站的钓鱼链接")
                     }
+                    Toggle(isOn: $privacy.loadSenderIcons) {
+                        row("联网获取发件人图标", "globe",
+                            "常见大厂的图标已内置，不用联网。打开后其他发件人也会从 DuckDuckGo 取网站图标，DuckDuckGo 会知道发件人的域名")
+                    }
                 } header: {
                     Text("邮件")
                 }
@@ -109,7 +113,7 @@ struct TrustedSendersView: View {
             }
             ForEach(privacy.trustedSenders, id: \.self) { sender in
                 HStack(spacing: 12) {
-                    Avatar(text: sender, size: 32)
+                    SenderAvatar(address: sender, size: 32)
                     Text(sender).lineLimit(1)
                 }
             }

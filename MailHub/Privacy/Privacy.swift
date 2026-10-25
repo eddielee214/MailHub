@@ -15,6 +15,8 @@ final class Privacy {
     var loadRemoteImages: Bool { didSet { defaults.set(loadRemoteImages, forKey: "privacy.loadRemoteImages") } }
     /// 始终加载远程图片的发件人地址(小写)
     var trustedSenders: [String] { didSet { defaults.set(trustedSenders, forKey: "privacy.trustedSenders") } }
+    /// 没内置图标的发件人，联网取网站图标(会把发件人域名发给图标服务)
+    var loadSenderIcons: Bool { didSet { defaults.set(loadSenderIcons, forKey: "privacy.loadSenderIcons") } }
     /// 点邮件里的链接时先显示真实地址
     var confirmLinks: Bool { didSet { defaults.set(confirmLinks, forKey: "privacy.confirmLinks") } }
     /// 打开 App 要 Face ID / 锁屏密码
@@ -27,6 +29,7 @@ final class Privacy {
     private init() {
         defaults.register(defaults: [
             "privacy.loadRemoteImages": false,
+            "privacy.loadSenderIcons": false,
             "privacy.confirmLinks": true,
             "privacy.appLock": false,
             "privacy.hideInSwitcher": true,
@@ -34,6 +37,7 @@ final class Privacy {
         ])
         loadRemoteImages = defaults.bool(forKey: "privacy.loadRemoteImages")
         trustedSenders = defaults.stringArray(forKey: "privacy.trustedSenders") ?? []
+        loadSenderIcons = defaults.bool(forKey: "privacy.loadSenderIcons")
         confirmLinks = defaults.bool(forKey: "privacy.confirmLinks")
         appLock = defaults.bool(forKey: "privacy.appLock")
         hideInSwitcher = defaults.bool(forKey: "privacy.hideInSwitcher")
