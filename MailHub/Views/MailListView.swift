@@ -8,6 +8,8 @@ struct MailListView: View {
     @State private var mails: [MailSummary] = []
     @State private var hasMore = false
     @State private var loading = false
+    /// 已经显示着缓存/留存的列表，正在后台去邮箱取最新的
+    @State private var syncing = false
     @State private var error: String?
     @State private var methodLabel: String?
     @State private var generation = 0
@@ -111,8 +113,10 @@ struct MailListView: View {
         .sheet(isPresented: $showShareHistory) { ShareManagementView(account: account) }
         .sheet(isPresented: $showEdit) { AccountEditView(accountId: account.id) }
         .sheet(isPresented: $showCompose) { ComposeView(account: account) }
-        .refreshable { await load(reset: true) }
-        .task(id: folder) { await load(reset: true) }
+        // 下拉刷新时保留现有列表，取回来再替换
+        .refreshable { await load(reset: true, background: !mails.isEmpty) }
+        .task(id: folder) { await open() }
+        .onChange(of: mails) { store() }
         .toast($toast)
     }
 
@@ -141,6 +145,12 @@ struct MailListView: View {
                         .contentTransition(.numericText(value: Double(mails.count)))
                 }
                 Spacer()
+                if syncing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel("正在同步")
+                        .transition(.opacity)
+                }
                 if let methodLabel {
                     Text(methodLabel)
                         .font(.caption2.weight(.semibold))
@@ -149,18 +159,64 @@ struct MailListView: View {
                         .background(DS.Palette.surface, in: Capsule())
                 }
             }
+            .animation(DS.Motion.snappy, value: syncing)
         }
     }
 
-    private func load(reset: Bool) async {
+    private var cacheKey: String { "\(account.email)|\(folder.rawValue)" }
+
+    /// 打开文件夹：有这次看过的列表、或服务器留存了邮件，就先显示出来，再在后台去邮箱取最新的。
+    /// 去微软/IMAP 取信要几秒，网页版也是这么做的
+    private func open() async {
+        if let cached = api.mailListCache[cacheKey] {
+            show(cached.mails, hasMore: cached.hasMore, method: cached.method)
+            await load(reset: true, background: true)
+            return
+        }
+        // 换到没看过的文件夹：先清掉上一个文件夹的邮件，免得在它上面操作
+        loading = true
+        withAnimation(DS.Motion.snappy) { mails = [] }
+        // 服务端设置里没开"本地保留邮件"时这里是空的，很快返回，接着照常取
+        if let local = try? await api.emails(account: account.email, folder: folder, skip: 0, local: true),
+           let list = local.emails, !list.isEmpty {
+            guard !Task.isCancelled else { return }
+            show(list, hasMore: local.hasMore ?? false, method: local.method)
+            await load(reset: true, background: true)
+        } else {
+            guard !Task.isCancelled else { return }
+            await load(reset: true)
+        }
+    }
+
+    private func show(_ list: [MailSummary], hasMore: Bool, method: String?) {
+        withAnimation(DS.Motion.snappy) { mails = list }
+        self.hasMore = hasMore
+        methodLabel = method
+        error = nil
+        loading = false
+    }
+
+    private func store() {
+        guard !mails.isEmpty else { return }
+        api.mailListCache[cacheKey] = MailListCacheEntry(mails: mails, hasMore: hasMore, method: methodLabel)
+    }
+
+    /// background：列表已经有内容，只在标题旁转个小圈，失败也保留现有列表
+    private func load(reset: Bool, background: Bool = false) async {
         if !reset && loading { return }
         generation += 1
         let current = generation
-        loading = true
-        if reset { error = nil }
+        if background { syncing = true } else { loading = true }
+        if reset && !background { error = nil }
+        defer {
+            if current == generation {
+                loading = false
+                syncing = false
+            }
+        }
         do {
             let r = try await api.emails(account: account.email, folder: folder, skip: reset ? 0 : mails.count)
-            guard current == generation else { return }
+            guard current == generation, !Task.isCancelled else { return }
             let incoming = r.emails ?? []
             if reset {
                 // 换文件夹/下拉刷新：整页淡入替换，避免内容突然跳变
@@ -171,13 +227,17 @@ struct MailListView: View {
             }
             hasMore = r.hasMore ?? false
             methodLabel = r.method
+            store()
         } catch {
-            guard current == generation else { return }
+            guard current == generation, !Task.isCancelled else { return }
+            if background {
+                toast = "同步失败：\(error.localizedDescription)"
+                return
+            }
             if reset { mails = [] }
             hasMore = false
             self.error = error.localizedDescription
         }
-        loading = false
     }
 
     private func markRead(_ mail: MailSummary) {

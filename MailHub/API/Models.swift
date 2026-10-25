@@ -88,6 +88,12 @@ struct MailListResponse: Decodable {
     let method: String?
 }
 
+struct MailListCacheEntry {
+    var mails: [MailSummary]
+    var hasMore: Bool
+    var method: String?
+}
+
 struct MailAttachment: Decodable, Identifiable, Hashable {
     let id: String
     let name: String?

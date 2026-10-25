@@ -22,6 +22,8 @@ final class APIClient {
     private(set) var isLoggedIn: Bool?
 
     private var csrfToken: String?
+    /// 看过的邮件列表(账号 + 文件夹)，切回来先显示它再后台刷新。只在内存里，退出登录清空
+    @ObservationIgnored var mailListCache: [String: MailListCacheEntry] = [:]
     let session: URLSession
     let decoder: JSONDecoder = {
         let d = JSONDecoder()
@@ -97,6 +99,7 @@ final class APIClient {
         _ = try? await session.data(for: request)
         HTTPCookieStorage.shared.cookies(for: serverURL)?.forEach(HTTPCookieStorage.shared.deleteCookie)
         csrfToken = nil
+        mailListCache = [:]
         isLoggedIn = false
     }
 
@@ -210,18 +213,23 @@ final class APIClient {
 
     // MARK: 邮件
 
-    func emails(account: String, folder: MailFolder, skip: Int, top: Int = 20) async throws -> MailListResponse {
-        try await send("GET", "/api/emails/\(pathEscape(account))", query: [
+    /// local = 只读服务器本地留存的邮件(服务端设置里开了"本地保留邮件"才有)，不连微软，很快
+    func emails(account: String, folder: MailFolder, skip: Int, top: Int = 20,
+                local: Bool = false) async throws -> MailListResponse {
+        var query = [
             URLQueryItem(name: "folder", value: folder.rawValue),
             URLQueryItem(name: "skip", value: String(skip)),
             URLQueryItem(name: "top", value: String(top)),
-        ])
+        ]
+        if local { query.append(URLQueryItem(name: "source", value: "local")) }
+        return try await send("GET", "/api/emails/\(pathEscape(account))", query: query)
     }
 
     func emailDetail(account: String, mail: MailSummary, folder: MailFolder) async throws -> MailDetail {
         struct R: Decodable { let email: MailDetail }
+        // 服务器留存了正文就直接返回，没有再去取(和网页版一样)
         let r: R = try await send("GET", "/api/email/\(pathEscape(account))/\(pathEscape(mail.id))",
-                                  query: mailQuery(mail, folder: folder))
+                                  query: mailQuery(mail, folder: folder) + [URLQueryItem(name: "prefer_local", value: "1")])
         return r.email
     }
 
