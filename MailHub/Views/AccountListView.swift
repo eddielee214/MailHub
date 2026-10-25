@@ -22,6 +22,15 @@ struct AccountListView: View {
     @State private var refreshing: Set<Int> = []
 
     @State private var path = NavigationPath()
+    /// iPad 等宽屏：分组常驻左栏，选中的账号在右边显示邮件
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @State private var selectedAccount: MailAccount?
+    @State private var columns: NavigationSplitViewVisibility = .automatic
+    /// 三栏的总宽度：够宽(横屏)时分组栏默认常驻，窄(竖屏)时是盖在上面的浮层
+    @State private var splitWidth: CGFloat = 0
+    /// 分组栏有没有被系统挂到界面上(收起时会摘掉，触发 onDisappear)。
+    /// 手势收起、点空白处关浮层时系统不一定改 columns，所以不能只看 columns
+    @State private var groupsOnScreen = false
     @State private var drawerOpen = false
     /// 手指拖动抽屉时的位移(相对于开/关的静止位置)
     @State private var drawerDrag: CGFloat = 0
@@ -43,6 +52,8 @@ struct AccountListView: View {
         _drawerOpen = State(initialValue: DemoMode.screen == "drawer")
         _selecting = State(initialValue: DemoMode.screen == "batch")
         _selection = State(initialValue: DemoMode.screen == "batch" ? [1, 3] : [])
+        // 复现"记录的值是全部显示、屏幕上其实收着"的状态(竖屏启动时就是这样)
+        if DemoMode.screen == "split-toggle" { _columns = State(initialValue: .all) }
     }
     #endif
 
@@ -50,56 +61,12 @@ struct AccountListView: View {
         "\(groupId ?? -1)|\(tagIds.sorted())|\(query)"
     }
 
-    var body: some View {
-        ZStack(alignment: .leading) {
-            NavigationStack(path: $path) {
-                VStack(spacing: 0) {
-                    searchBar
-                    groupTabs
-                    accountList
-                }
-                .toolbar(.hidden, for: .navigationBar)
-                .navigationDestination(for: MailAccount.self) { MailListView(account: $0) }
-                .overlay(alignment: .bottomTrailing) {
-                    if !selecting {
-                        FloatingButton(title: "导入", systemImage: "square.and.arrow.down", collapsed: fabCollapsed) {
-                            panel = .importAccounts
-                        }
-                        .transition(.scale(scale: 0.8).combined(with: .opacity))
-                    }
-                }
-                .safeAreaInset(edge: .bottom) {
-                    if selecting {
-                        BatchBar(
-                            count: selection.count, groups: groups, tags: tags,
-                            onMove: { id in runBatch("已移动") { try await api.batchMove(Array(selection), groupId: id) } },
-                            onTag: { id, add in
-                                runBatch(add ? "已添加标签" : "已移除标签") { try await api.batchTag(Array(selection), tagId: id, add: add) }
-                            },
-                            onStatus: { on in runBatch(on ? "已启用" : "已停用") { try await api.batchStatus(Array(selection), active: on) } },
-                            onForwarding: { on in
-                                runBatch(on ? "已开启转发" : "已关闭转发") { try await api.batchForwarding(Array(selection), enabled: on) }
-                            },
-                            onRefresh: { panel = .refreshSetup(nil, accounts.filter { selection.contains($0.id) }) },
-                            onCopy: copySelected,
-                            onExport: { askExportPassword = true },
-                            onDelete: { confirmBatchDelete = true })
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                }
-                .animation(DS.Motion.snappy, value: selecting)
-                // 首页从屏幕左边缘往右拖拉出抽屉(Gmail 手势)
-                .overlay(alignment: .leading) {
-                    if path.isEmpty && !drawerOpen {
-                        Color.clear
-                            .frame(width: 18)
-                            .contentShape(Rectangle())
-                            .gesture(drawerGesture)
-                    }
-                }
-            }
+    /// 宽度够时(iPad、大屏横放)用三栏；状态都在这个 View 上，切换布局不会丢选择和筛选
+    private var isRegular: Bool { sizeClass == .regular }
 
-            drawerLayer
+    var body: some View {
+        Group {
+            if isRegular { splitLayout } else { stackLayout }
         }
         .sheet(item: $panel) { panelView($0) }
         .sheet(item: $exportedFile, onDismiss: TempFiles.purge) {
@@ -124,6 +91,120 @@ struct AccountListView: View {
             await load(reset: true)
         }
         .onChange(of: groupId) { setDrawer(false) }
+    }
+
+    // MARK: 布局
+
+    /// 手机：单栏导航，分组在抽屉里
+    private var stackLayout: some View {
+        ZStack(alignment: .leading) {
+            NavigationStack(path: $path) {
+                mainColumn
+                    .navigationDestination(for: MailAccount.self) { MailListView(account: $0) }
+                    // 首页从屏幕左边缘往右拖拉出抽屉(Gmail 手势)
+                    .overlay(alignment: .leading) {
+                        if path.isEmpty && !drawerOpen {
+                            Color.clear
+                                .frame(width: 18)
+                                .contentShape(Rectangle())
+                                .gesture(drawerGesture)
+                        }
+                    }
+            }
+
+            drawerLayer
+        }
+    }
+
+    /// iPad：分组栏 | 账号列表 | 邮件。竖屏时分组栏自动收起，点搜索栏左边的按钮或从左边缘划出
+    private var splitLayout: some View {
+        NavigationSplitView(columnVisibility: $columns) {
+            groupDrawer
+                .toolbar(.hidden, for: .navigationBar)
+                .onAppear { groupsOnScreen = true }
+                .onDisappear { groupsOnScreen = false }
+                .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 340)
+        } content: {
+            mainColumn
+                .navigationSplitViewColumnWidth(min: 320, ideal: 360, max: 440)
+        } detail: {
+            NavigationStack {
+                if let selectedAccount {
+                    MailListView(account: selectedAccount)
+                        .id(selectedAccount.id)
+                } else {
+                    ContentUnavailableView("选择一个邮箱", systemImage: "tray",
+                                           description: Text("在左边的列表里点一个账号查看邮件"))
+                }
+            }
+        }
+        .navigationSplitViewStyle(.balanced)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { splitWidth = $0 }
+    }
+
+    /// 宽于这个值时分组栏和列表并排，窄了是浮层(实测 iPad 13 寸竖屏 1032pt 是浮层，各尺寸横屏都在 1180pt 以上)
+    private static let wideSplit: CGFloat = 1100
+
+    /// 竖屏启动时分组栏虽然收着也会先 onAppear 一次，但系统会把 columns 改成 .doubleColumn，两个一起看
+    private var groupsShown: Bool { groupsOnScreen && columns != .doubleColumn }
+
+    private func showGroups(_ show: Bool) {
+        let target: NavigationSplitViewVisibility = show ? .all : .doubleColumn
+        if columns == target {
+            // 记录的值和屏幕上不一致(系统自己开关过)：赋同样的值不会生效，先换成和现状一致的值，下一帧再设
+            columns = show ? .doubleColumn : .all
+            Task { withAnimation(DS.Motion.panel) { columns = target } }
+        } else {
+            withAnimation(DS.Motion.panel) { columns = target }
+        }
+    }
+
+    /// 搜索栏 + 分组标签 + 账号列表，两种布局共用
+    private var mainColumn: some View {
+        VStack(spacing: 0) {
+            searchBar
+            // 宽屏时分组常驻左栏，不再重复显示这一排
+            if !isRegular { groupTabs }
+            accountList
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .overlay(alignment: .bottomTrailing) {
+            if !selecting {
+                FloatingButton(title: "导入", systemImage: "square.and.arrow.down", collapsed: fabCollapsed) {
+                    panel = .importAccounts
+                }
+                .transition(.scale(scale: 0.8).combined(with: .opacity))
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if selecting {
+                BatchBar(
+                    count: selection.count, groups: groups, tags: tags,
+                    onMove: { id in runBatch("已移动") { try await api.batchMove(Array(selection), groupId: id) } },
+                    onTag: { id, add in
+                        runBatch(add ? "已添加标签" : "已移除标签") { try await api.batchTag(Array(selection), tagId: id, add: add) }
+                    },
+                    onStatus: { on in runBatch(on ? "已启用" : "已停用") { try await api.batchStatus(Array(selection), active: on) } },
+                    onForwarding: { on in
+                        runBatch(on ? "已开启转发" : "已关闭转发") { try await api.batchForwarding(Array(selection), enabled: on) }
+                    },
+                    onRefresh: { panel = .refreshSetup(nil, accounts.filter { selection.contains($0.id) }) },
+                    onCopy: copySelected,
+                    onExport: { askExportPassword = true },
+                    onDelete: { confirmBatchDelete = true })
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(DS.Motion.snappy, value: selecting)
+    }
+
+    /// 搜索栏左边的按钮：手机上拉出抽屉，iPad 上显示/收起分组栏
+    private func toggleGroups() {
+        if isRegular {
+            showGroups(!groupsShown)
+        } else {
+            setDrawer(true)
+        }
     }
 
     // MARK: 抽屉(跟手拖动，松手按速度决定开关)
@@ -159,30 +240,35 @@ struct AccountListView: View {
                 .allowsHitTesting(progress > 0)
                 .onTapGesture { setDrawer(false) }
                 .accessibilityHidden(true)
-            GroupDrawer(
-                groups: orderedGroups, tags: tags, allCount: allCount,
-                server: api.serverURL.host() ?? "",
-                groupId: $groupId, tagIds: $tagIds,
-                onSelectGroup: selectGroup,
-                onImport: { open(.importAccounts) },
-                onSettings: { open(.settings) },
-                onShares: { open(.shares) },
-                onRefreshCenter: { open(.refreshCenter) },
-                onTempEmails: { open(.tempEmails) },
-                onForwarding: { open(.forwarding) },
-                onOAuth: { open(.oauthHelper) },
-                onManageTags: { open(.tags) },
-                onEditGroup: { open(.group($0)) },
-                onRefreshGroup: { open(.refreshSetup($0.id, nil)) },
-                tempCount: groups.first(where: \.isTempEmailGroup)?.accountCount ?? 0,
-                onLogout: { Task { await api.logout() } }
-            )
+            groupDrawer
             .frame(width: drawerWidth)
             .shadow(color: .black.opacity(0.2 * progress), radius: 16, x: 4)
             .offset(x: (progress - 1) * (drawerWidth + 24))
             .gesture(drawerGesture)
             .accessibilityHidden(progress == 0)
         }
+    }
+
+    /// 手机上是抽屉，iPad 上是常驻的左栏
+    private var groupDrawer: some View {
+        GroupDrawer(
+            groups: orderedGroups, tags: tags, allCount: allCount,
+            server: api.serverURL.host() ?? "",
+            groupId: $groupId, tagIds: $tagIds,
+            onSelectGroup: selectGroup,
+            onImport: { open(.importAccounts) },
+            onSettings: { open(.settings) },
+            onShares: { open(.shares) },
+            onRefreshCenter: { open(.refreshCenter) },
+            onTempEmails: { open(.tempEmails) },
+            onForwarding: { open(.forwarding) },
+            onOAuth: { open(.oauthHelper) },
+            onManageTags: { open(.tags) },
+            onEditGroup: { open(.group($0)) },
+            onRefreshGroup: { open(.refreshSetup($0.id, nil)) },
+            tempCount: groups.first(where: \.isTempEmailGroup)?.accountCount ?? 0,
+            onLogout: { Task { await api.logout() } }
+        )
     }
 
     private func setDrawer(_ open: Bool, fling: Bool = false) {
@@ -197,7 +283,7 @@ struct AccountListView: View {
 
     private var searchBar: some View {
         HStack(spacing: DS.Spacing.xs) {
-            Button("分组和标签", systemImage: "line.3.horizontal") { setDrawer(true) }
+            Button("分组和标签", systemImage: isRegular ? "sidebar.left" : "line.3.horizontal", action: toggleGroups)
                 .labelStyle(.iconOnly)
                 .font(.title3)
                 .frame(width: DS.Size.tapTarget, height: DS.Size.tapTarget)
@@ -277,6 +363,8 @@ struct AccountListView: View {
 
     private func selectGroup(_ id: Int?) {
         withAnimation(DS.Motion.adaptive(DS.Motion.snappy, reduceMotion: reduceMotion)) { groupId = id }
+        // 竖屏时分组栏是浮层，选完收起来看列表
+        if isRegular, splitWidth < Self.wideSplit, groupsShown { showGroups(false) }
     }
 
     // MARK: 列表
@@ -312,6 +400,13 @@ struct AccountListView: View {
                         }
                         .buttonStyle(.plain)
                         .transition(.opacity)
+                    } else if isRegular {
+                        // 宽屏：点一下在右栏打开，不压栈
+                        Button { selectedAccount = account } label: {
+                            AccountRow(account: account, refreshing: refreshing.contains(account.id))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(selectedAccount?.id == account.id ? .isSelected : [])
                     } else {
                         ZStack {
                             // NavigationLink 自带的箭头和 Gmail 风格不搭，用透明链接盖住整行
@@ -322,6 +417,7 @@ struct AccountListView: View {
                 }
                 .listRowSeparator(.hidden)
                 .listRowInsets(rowInsets(top: DS.Spacing.s, bottom: DS.Spacing.s))
+                .listRowBackground(selectionBackground(for: account))
                 .swipeActions(edge: .leading) {
                     Button("复制", systemImage: "doc.on.doc") { copy(account.email) }
                         .tint(DS.Palette.accent)
@@ -377,6 +473,16 @@ struct AccountListView: View {
         // 往下滚收起悬浮按钮的文字，往上滚或回到顶部展开
         .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.y + $0.contentInsets.top }) { old, new in
             if new < 24 { fabCollapsed = false } else if new - old > 8 { fabCollapsed = true } else if old - new > 8 { fabCollapsed = false }
+        }
+    }
+
+    /// 宽屏时右栏正在看的账号：浅蓝圆角底，和分组栏的选中色一致
+    @ViewBuilder
+    private func selectionBackground(for account: MailAccount) -> some View {
+        if isRegular, !selecting, selectedAccount?.id == account.id {
+            RoundedRectangle(cornerRadius: DS.Radius.chip)
+                .fill(DS.Palette.accentSoft)
+                .padding(.horizontal, DS.Spacing.s)
         }
     }
 
@@ -620,6 +726,20 @@ struct AccountListView: View {
             }
             total = page.total ?? accounts.count
             hasMore = page.hasMore ?? false
+            #if DEBUG
+            // iPad 截图用：直接选中第一个账号
+            if DemoMode.screen?.hasPrefix("split") == true, selectedAccount == nil { selectedAccount = accounts.first }
+            if DemoMode.screen == "split-groups" { columns = .all }
+            // 模拟器里点不了按钮：自动按几次开关，配合定时截图检查开合
+            if DemoMode.screen == "split-toggle", generation == 1 {
+                Task {
+                    for _ in 0..<4 {
+                        try? await Task.sleep(for: .seconds(4))
+                        toggleGroups()
+                    }
+                }
+            }
+            #endif
         } catch {
             guard current == generation else { return }
             if reset { accounts = []; total = 0 }

@@ -84,6 +84,9 @@ struct LoginView: View {
                     .multilineTextAlignment(.center)
             }
             .padding(.horizontal, 24)
+            // iPad 上不铺满整屏，保持手机那样的宽度居中
+            .frame(maxWidth: 480)
+            .frame(maxWidth: .infinity)
         }
         .scrollDismissesKeyboard(.interactively)
         .onAppear {

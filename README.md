@@ -4,7 +4,7 @@
 
 # MailHub
 
-[outlookEmail](https://github.com/assast/outlookEmail) 的 iPhone 客户端：收信、复制验证码、管理账号、刷新 Token
+[outlookEmail](https://github.com/assast/outlookEmail) 的 iPhone / iPad 客户端：收信、复制验证码、管理账号、刷新 Token
 
 [![Release](https://img.shields.io/github/v/release/eddielee214/MailHub?include_prereleases&label=Release&color=2563EB)](https://github.com/eddielee214/MailHub/releases)
 [![iOS](https://img.shields.io/badge/iOS-18.0%2B-000000?logo=apple&logoColor=white)](https://github.com/eddielee214/MailHub/releases)
@@ -14,6 +14,10 @@
 <img src="docs/screenshots/mails-dark.png" width="200" alt="邮件列表(深色模式)" />
 <img src="docs/screenshots/drawer.png" width="200" alt="分组与标签" />
 <img src="docs/screenshots/refresh-dark.png" width="200" alt="Token 刷新(深色模式)" />
+
+<img src="docs/screenshots/ipad.png" width="820" alt="iPad 横屏：分组、账号、邮件三栏" />
+
+<img src="docs/screenshots/ipad-dark.png" width="820" alt="iPad 横屏(深色模式)" />
 
 </div>
 
@@ -54,6 +58,7 @@
 - 邮箱分享：限时或永久链接、只给看最新 N 封、二维码，可撤销
 - 临时邮箱：GPTMail / DuckMail / Cloudflare Temp Email
 - 转发记录、立即检查转发
+- iPad：横屏三栏(分组、账号、邮件)，竖屏两栏，分组栏可以收起；支持分屏和台前调度
 
 ## 隐私与安全
 
