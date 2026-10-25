@@ -266,6 +266,7 @@ struct AccountListView: View {
             onManageTags: { open(.tags) },
             onEditGroup: { open(.group($0)) },
             onRefreshGroup: { open(.refreshSetup($0.id, nil)) },
+            onNewSubgroup: { open(.subgroup($0)) },
             tempCount: groups.first(where: \.isTempEmailGroup)?.accountCount ?? 0,
             onLogout: { Task { await api.logout() } }
         )
@@ -582,6 +583,8 @@ struct AccountListView: View {
         case importAccounts, settings, shares, refreshCenter, tempEmails, forwarding, oauthHelper, tags
         case share(MailAccount), shareHistory(MailAccount), edit(MailAccount)
         case group(MailGroup?)
+        /// 在这个分组下新建子分组
+        case subgroup(MailGroup)
         /// 按分组(nil = 全部)或按选中账号刷新，可自定义间隔
         case refreshSetup(Int?, [MailAccount]?)
 
@@ -599,6 +602,7 @@ struct AccountListView: View {
             case .shareHistory(let a): "history-\(a.id)"
             case .edit(let a): "edit-\(a.id)"
             case .group(let g): "group-\(g?.id ?? 0)"
+            case .subgroup(let g): "subgroup-\(g.id)"
             case .refreshSetup: "refresh-setup"
             }
         }
@@ -645,6 +649,8 @@ struct AccountListView: View {
             TagManageView { Task { await reloadAll() } }
         case .group(let g):
             GroupEditView(group: g, groups: normalGroups) { Task { await reloadAll() } }
+        case .subgroup(let parent):
+            GroupEditView(group: nil, groups: normalGroups, initialParentId: parent.id) { Task { await reloadAll() } }
         }
     }
 

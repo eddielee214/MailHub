@@ -21,6 +21,7 @@ struct GroupDrawer: View {
     /// nil = 新建分组
     let onEditGroup: (MailGroup?) -> Void
     let onRefreshGroup: (MailGroup) -> Void
+    let onNewSubgroup: (MailGroup) -> Void
     /// 服务端"临时邮箱"分组里的邮箱数
     var tempCount = 0
     let onLogout: () -> Void
@@ -55,6 +56,10 @@ struct GroupDrawer: View {
                             selected: groupId == item.group.id, depth: item.depth) { onSelectGroup(item.group.id) }
                             .contextMenu {
                                 Button("编辑分组", systemImage: "pencil") { onEditGroup(item.group) }
+                                // 最多三级：第三级下面不能再建
+                                if item.depth < 2 {
+                                    Button("新建子分组", systemImage: "folder.badge.plus") { onNewSubgroup(item.group) }
+                                }
                                 Button("刷新此分组 Token", systemImage: "arrow.triangle.2.circlepath") {
                                     onRefreshGroup(item.group)
                                 }

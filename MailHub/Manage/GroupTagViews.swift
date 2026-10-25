@@ -44,6 +44,8 @@ struct GroupEditView: View {
     /// nil = 新建
     let group: MailGroup?
     let groups: [MailGroup]
+    /// 新建子分组时预先选好的上级分组
+    var initialParentId: Int?
     var onChanged: () -> Void = {}
 
     @State private var name = ""
@@ -101,7 +103,7 @@ struct GroupEditView: View {
                     }
                 }
             }
-            .navigationTitle(group == nil ? "新建分组" : "编辑分组")
+            .navigationTitle(group != nil ? "编辑分组" : initialParentId != nil ? "新建子分组" : "新建分组")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
@@ -133,7 +135,10 @@ struct GroupEditView: View {
     }
 
     private func load() async {
-        guard let group else { return }
+        guard let group else {
+            parentId = initialParentId
+            return
+        }
         name = group.name
         color = group.color ?? color
         parentId = group.parentId
