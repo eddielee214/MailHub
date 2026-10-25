@@ -22,11 +22,15 @@ struct GroupDrawer: View {
     let onEditGroup: (MailGroup?) -> Void
     let onRefreshGroup: (MailGroup) -> Void
     let onNewSubgroup: (MailGroup) -> Void
+    /// 账号拖到分组上松手：参数是拖来的邮箱地址，返回是否接收
+    var onDropAccounts: ([String], MailGroup) -> Bool = { _, _ in false }
     /// 服务端"临时邮箱"分组里的邮箱数
     var tempCount = 0
     let onLogout: () -> Void
 
     @Namespace private var selection
+    /// 正有账号拖在上面的分组，高亮提示松手会移到这里
+    @State private var dropTarget: Int?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -54,6 +58,21 @@ struct GroupDrawer: View {
                         row(title: item.group.name, icon: nil, color: Color(hex: item.group.color) ?? .gray,
                             count: item.group.descendantAccountCount ?? item.group.accountCount ?? 0,
                             selected: groupId == item.group.id, depth: item.depth) { onSelectGroup(item.group.id) }
+                            .overlay {
+                                if dropTarget == item.group.id {
+                                    UnevenRoundedRectangle(bottomTrailingRadius: 22, topTrailingRadius: 22)
+                                        .strokeBorder(DS.Palette.accent, lineWidth: 2)
+                                        .background(DS.Palette.accentSoft, in: UnevenRoundedRectangle(bottomTrailingRadius: 22, topTrailingRadius: 22))
+                                        .allowsHitTesting(false)
+                                }
+                            }
+                            .dropDestination(for: String.self) { items, _ in
+                                onDropAccounts(items, item.group)
+                            } isTargeted: { on in
+                                withAnimation(DS.Motion.press) {
+                                    if on { dropTarget = item.group.id } else if dropTarget == item.group.id { dropTarget = nil }
+                                }
+                            }
                             .contextMenu {
                                 Button("编辑分组", systemImage: "pencil") { onEditGroup(item.group) }
                                 // 最多三级：第三级下面不能再建

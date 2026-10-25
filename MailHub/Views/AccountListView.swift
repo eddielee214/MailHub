@@ -267,6 +267,7 @@ struct AccountListView: View {
             onEditGroup: { open(.group($0)) },
             onRefreshGroup: { open(.refreshSetup($0.id, nil)) },
             onNewSubgroup: { open(.subgroup($0)) },
+            onDropAccounts: moveDropped,
             tempCount: groups.first(where: \.isTempEmailGroup)?.accountCount ?? 0,
             onLogout: { Task { await api.logout() } }
         )
@@ -419,6 +420,8 @@ struct AccountListView: View {
                 .listRowSeparator(.hidden)
                 .listRowInsets(rowInsets(top: DS.Spacing.s, bottom: DS.Spacing.s))
                 .listRowBackground(selectionBackground(for: account))
+                // 宽屏：账号可以拖到左边分组栏的分组上移动过去
+                .modifier(AccountDrag(enabled: isRegular, emails: dragEmails(for: account)))
                 .swipeActions(edge: .leading) {
                     Button("复制", systemImage: "doc.on.doc") { copy(account.email) }
                         .tint(DS.Palette.accent)
@@ -682,6 +685,35 @@ struct AccountListView: View {
         }
     }
 
+    // MARK: 拖动账号到分组
+
+    /// 拖的内容是邮箱地址(拖到别的 App 里就是普通文字)。批量选择时拖选中的任意一个，就是拖全部选中的
+    private func dragEmails(for account: MailAccount) -> String {
+        guard selecting, selection.contains(account.id) else { return account.email }
+        return accounts.filter { selection.contains($0.id) }.map(\.email).joined(separator: "\n")
+    }
+
+    /// 分组栏接住拖来的邮箱：按地址找回当前列表里的账号，调批量移动
+    private func moveDropped(_ items: [String], to group: MailGroup) -> Bool {
+        let emails = Set(items.flatMap { $0.split(whereSeparator: \.isNewline) }.map { $0.trimmingCharacters(in: .whitespaces).lowercased() })
+        let ids = accounts.filter { emails.contains($0.email.lowercased()) && $0.groupId != group.id }.map(\.id)
+        guard !ids.isEmpty else { return false }
+        Task {
+            do {
+                _ = try await api.batchMove(ids, groupId: group.id)
+                toast = ids.count == 1 ? "已移到「\(group.name)」" : "已把 \(ids.count) 个账号移到「\(group.name)」"
+                withAnimation(DS.Motion.snappy) {
+                    selecting = false
+                    selection = []
+                }
+                await reloadAll()
+            } catch {
+                toast = "移动失败：\(error.localizedDescription)"
+            }
+        }
+        return true
+    }
+
     private func copySelected() {
         let emails = accounts.filter { selection.contains($0.id) }.map(\.email)
         Privacy.shared.copy(emails.joined(separator: "\n"))
@@ -777,6 +809,26 @@ struct AccountListView: View {
                 toast = "刷新失败：\(error.localizedDescription)"
             }
             refreshing.remove(account.id)
+        }
+    }
+}
+
+/// 账号行可拖动(只在宽屏开)，拖起来时显示一个邮箱小胶囊
+private struct AccountDrag: ViewModifier {
+    let enabled: Bool
+    let emails: String
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.draggable(emails) {
+                let count = emails.split(whereSeparator: \.isNewline).count
+                Label(count > 1 ? "\(count) 个账号" : emails, systemImage: "envelope")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, DS.Spacing.m).padding(.vertical, DS.Spacing.s)
+                    .background(.regularMaterial, in: Capsule())
+            }
+        } else {
+            content
         }
     }
 }
