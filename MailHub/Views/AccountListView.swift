@@ -516,6 +516,7 @@ struct AccountListView: View {
                         }
                     }
                     .font(.subheadline)
+                    .buttonStyle(.borderless)
                 }
                 Button(selecting ? "完成" : "选择") {
                     withAnimation(DS.Motion.snappy) {
@@ -525,6 +526,8 @@ struct AccountListView: View {
                 }
                 .font(.subheadline.weight(.semibold))
                 .frame(minHeight: DS.Size.tapTarget)
+                // 列表同一行里的默认样式按钮点一下会一起触发(点"全选"连"完成"也执行了)，改成各管各的
+                .buttonStyle(.borderless)
             }
             .animation(DS.Motion.snappy, value: total)
             if !tagIds.isEmpty {
